@@ -212,6 +212,7 @@ def train_one_epoch(sess, ops, train_writer):
         current_data, current_label, _ = provider.shuffle_data(
             current_data, np.squeeze(current_label))
         current_label = np.squeeze(current_label)
+        current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
 
         file_size = current_data.shape[0]
         num_batches = file_size // BATCH_SIZE
@@ -243,8 +244,6 @@ def train_one_epoch(sess, ops, train_writer):
         log_string('mean loss: %f' % (loss_sum / float(num_batches)))
         log_string('accuracy: %f' % (total_correct / float(total_seen)))
 
-        print('=== accuracy', (total_correct / float(total_seen)))
-
 
 def eval_one_epoch(sess, ops, test_writer):
     """ ops: dict mapping from string to tf ops """
@@ -260,6 +259,7 @@ def eval_one_epoch(sess, ops, test_writer):
         current_data, current_label = provider.loadDataFile(TEST_FILES[fn])
         current_data = current_data[:, 0:NUM_POINT, :]
         current_label = np.squeeze(current_label)
+        current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
 
         file_size = current_data.shape[0]
         num_batches = file_size // BATCH_SIZE
@@ -288,8 +288,6 @@ def eval_one_epoch(sess, ops, test_writer):
     ev_avg_acc = np.mean(np.array(total_correct_class) /
                          np.array(total_seen_class, dtype=np.float))
     log_string('eval avg class acc: %f' % ev_avg_acc)
-
-    print('=== eval avg acc ', ev_avg_acc)
 
 
 if __name__ == "__main__":
