@@ -131,7 +131,7 @@ def train():
             # Get model and loss
             pred, end_points = MODEL.get_model(
                 pointclouds_pl, is_training_pl, bn_decay=bn_decay, num_class=NUM_CLASSES)
-            loss = MODEL.get_loss(pred, labels_pl, end_points)
+            loss = MODEL.get_loss(pred, labels_pl, end_points, reg_weight=0.01)
             tf.summary.scalar('loss', loss)
 
             correct = tf.equal(tf.argmax(pred, 1), tf.to_int64(labels_pl))
@@ -190,7 +190,7 @@ def train():
             eval_one_epoch(sess, ops, test_writer)
 
             # Save the variables to disk.
-            if epoch % 20 == 0:         # TODO CHOOSE a reasonable number to save
+            if epoch % 10 == 0:         # TODO CHOOSE a reasonable number to save
                 save_path = saver.save(
                     sess, os.path.join(LOG_DIR, "model.ckpt"))
                 log_string("Model saved in file: %s" % save_path)
