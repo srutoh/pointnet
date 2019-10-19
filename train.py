@@ -81,8 +81,6 @@ HOSTNAME = socket.gethostname()
 DATA_DIR = FLAGS.data_dir
 TRAIN_FILES = glob.glob(DATA_DIR + 'train/**')
 TEST_FILES = glob.glob(DATA_DIR + 'test/**')
-print('got train file path such as:\n', TRAIN_FILES[1])
-print('and test file path such as:\n', TEST_FILES[1])
 
 
 def log_string(out_str):
@@ -186,8 +184,13 @@ def train():
             log_string('**** EPOCH %03d ****' % (epoch))
             sys.stdout.flush()
 
+            start_time = time.time()
+
             train_one_epoch(sess, ops, train_writer)
             eval_one_epoch(sess, ops, test_writer)
+
+            elapsed_mins = int((time.time() - start_time)/60)
+            log_string('this epoch took', elapsed_mins, 'minutes')
 
             # Save the variables to disk.
             if epoch % 10 == 0:         # TODO CHOOSE a reasonable number to save
