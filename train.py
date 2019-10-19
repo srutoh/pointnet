@@ -191,7 +191,7 @@ def train():
             eval_one_epoch(sess, ops, test_writer)
 
             elapsed_mins = int((time.time() - start_time)/60)
-            log_string('this epoch took', elapsed_mins, 'minutes')
+            log_string('this epoch took %02d minutes' % (elapsed_mins))
 
             # Save the variables to disk.
             if epoch % 10 == 0:         # TODO CHOOSE a reasonable number to save
