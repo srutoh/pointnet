@@ -4,6 +4,9 @@ import math
 import h5py
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt 
+from sklearn.metrics import confusion_matrix
+import itertools
 import socket
 import importlib
 import os
@@ -38,7 +41,7 @@ parser.add_argument('--decay_step', type=int, default=200000,
                     help='Decay step for lr decay [default: 200000]')
 parser.add_argument('--decay_rate', type=float, default=0.7,
                     help='Decay rate for lr decay [default: 0.8]')
-parser.add_argument('--data_dir', default='/home/sihong/Documents/Thesis/Datasets/rgbd-dataset-h5/',
+parser.add_argument('--data_dir', default='/home/sihong/Documents/Thesis/Datasets/rgbd-dataset-h5-every-fifth/',
                     help='Directory to train and test data')
 FLAGS = parser.parse_args()
 
@@ -64,7 +67,7 @@ LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
 LOG_FOUT.write(str(FLAGS)+'\n')
 
 MAX_NUM_POINT = 2048
-NUM_CLASSES = 51    # TODO: Check if number of class is set correctly everywhere
+NUM_CLASSES = 51
 
 BN_INIT_DECAY = 0.5
 BN_DECAY_DECAY_RATE = 0.5
@@ -82,6 +85,9 @@ HOSTNAME = socket.gethostname()
 DATA_DIR = FLAGS.data_dir
 TRAIN_FILES = glob.glob(DATA_DIR + 'train/**')
 TEST_FILES = glob.glob(DATA_DIR + 'test/**')
+
+LABELPATH = os.path.join(DATA_DIR, 'labels.txt')
+CLASSESLIST = np.genfromtxt(LABELPATH,dtype='str')
 
 
 def log_string(out_str):
@@ -111,6 +117,32 @@ def get_bn_decay(batch):
         staircase=True)
     bn_decay = tf.minimum(BN_DECAY_CLIP, 1 - bn_momentum)
     return bn_decay
+
+
+def plot_confusion_matrices(y_true, y_pred, classes, savepath, color_map=plt.cm.Blues):
+    # Compute confusion matrix and normalize
+    cm = confusion_matrix(y_true, y_pred)
+    cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    # Plot
+    plt.figure(figsize=(20, 16))
+    plt.imshow(cm, interpolation='nearest', cmap=color_map)
+    title = 'Confusion Matrix (normalized)'
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+    float_format = '.01f'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], float_format),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+
+    plt.savefig(savepath)
 
 
 def train():
@@ -194,7 +226,7 @@ def train():
             log_string('this epoch took %02d minutes' % (elapsed_mins))
 
             # Save the variables to disk.
-            if epoch % 10 == 0:         # TODO CHOOSE a reasonable number to save
+            if epoch % 5 == 0:         # TODO CHOOSE a reasonable number to save
                 save_path = saver.save(
                     sess, os.path.join(LOG_DIR, "model.ckpt"))
                 log_string("Model saved in file: %s" % save_path)
@@ -216,7 +248,7 @@ def train_one_epoch(sess, ops, train_writer):
         current_data, current_label, _ = provider.shuffle_data(
             current_data, np.squeeze(current_label))
         current_label = np.squeeze(current_label)
-        current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
+        # current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
 
         file_size = current_data.shape[0]
         num_batches = file_size // BATCH_SIZE
@@ -239,6 +271,7 @@ def train_one_epoch(sess, ops, train_writer):
             summary, step, _, loss_val, pred_val = sess.run([ops['merged'], ops['step'],
                                                              ops['train_op'], ops['loss'], ops['pred']], feed_dict=feed_dict)
             train_writer.add_summary(summary, step)
+            if int(step) % 100 ==0: print('step now: ', str(step))
             pred_val = np.argmax(pred_val, 1)
             correct = np.sum(pred_val == current_label[start_idx:end_idx])
             total_correct += correct
@@ -257,13 +290,15 @@ def eval_one_epoch(sess, ops, test_writer):
     loss_sum = 0
     total_seen_class = [0 for _ in range(NUM_CLASSES)]
     total_correct_class = [0 for _ in range(NUM_CLASSES)]
+    all_pred = []
+    all_true = []
 
     for fn in range(len(TEST_FILES)):
         log_string('----' + str(fn) + '-----')
         current_data, current_label = provider.loadDataFile(TEST_FILES[fn])
         current_data = current_data[:, 0:NUM_POINT, :]
         current_label = np.squeeze(current_label)
-        current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
+        # current_label = current_label - 1  # TODO label in dataset is 1 to 51, change it to 0 to 50
 
         file_size = current_data.shape[0]
         num_batches = file_size // BATCH_SIZE
@@ -278,6 +313,8 @@ def eval_one_epoch(sess, ops, test_writer):
             summary, step, loss_val, pred_val = sess.run([ops['merged'], ops['step'],
                                                           ops['loss'], ops['pred']], feed_dict=feed_dict)
             pred_val = np.argmax(pred_val, 1)
+            all_pred.extend(pred_val)
+            all_true.extend(current_label[start_idx:end_idx])
             correct = np.sum(pred_val == current_label[start_idx:end_idx])
             total_correct += correct
             total_seen += BATCH_SIZE
@@ -292,6 +329,9 @@ def eval_one_epoch(sess, ops, test_writer):
     ev_avg_acc = np.mean(np.array(total_correct_class) /
                          np.array(total_seen_class, dtype=np.float))
     log_string('eval avg class acc: %f' % ev_avg_acc)
+
+    cm_name = 'cm_' + str(step) + '.png'
+    plot_confusion_matrices(all_true, all_pred, CLASSESLIST, os.path.join(LOG_DIR, cm_name))
 
 
 if __name__ == "__main__":
